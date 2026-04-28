@@ -190,6 +190,8 @@ function GameDetail({ game }: { game: Game }) {
           if (!isMounted) return;
           try {
             const msg = JSON.parse(event.data);
+
+            // Handle PLAYERS_UPDATE - real-time substitutions and points
             if (msg.type === 'PLAYERS_UPDATE' && msg.payload?.gameId === gameId) {
               const newData = msg.payload.playersOnCourt;
 
@@ -218,6 +220,18 @@ function GameDetail({ game }: { game: Game }) {
                 away: newData.away.map(p => p.playerId),
               };
               setPlayersData(newData);
+            }
+
+            // Handle SCORE_UPDATE - real-time score changes
+            if (msg.type === 'SCORE_UPDATE' && msg.payload?.gameId === gameId) {
+              // Update game state with new score
+              setSelectedGame(prev => prev ? {
+                ...prev,
+                homeScore: msg.payload.homeScore,
+                awayScore: msg.payload.awayScore,
+                quarter: msg.payload.quarter,
+                clock: msg.payload.clock,
+              } : prev);
             }
           } catch {
             // ignore parse errors
