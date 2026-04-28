@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --dark-900: #0F0F0F;
+  --dark-800: #1A1A1A;
+  --dark-700: #262626;
+  --dark-600: #333333;
+  --dark-500: #404040;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--dark-900);
+  color: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dark-800);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--dark-500);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dark-600);
+}
+
+/* Status badge styles */
+.status-live {
+  @apply bg-red-500/20 text-red-400 border border-red-500/30;
+}
+
+.status-soon {
+  @apply bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+}
+
+.status-future {
+  @apply bg-blue-500/20 text-blue-400 border border-blue-500/30;
+}
+
+.status-finished {
+  @apply bg-gray-500/20 text-gray-400 border border-gray-500/30;
+}
+
+/* Prop line colors */
+.prop-green {
+  @apply text-green-500;
+}
+
+.prop-yellow {
+  @apply text-yellow-500;
+}
+
+.prop-red {
+  @apply text-red-500;
+}
+
+/* Pulse animation for live */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-live {
+  animation: pulse-live 2s ease-in-out infinite;
+}
