@@ -93,14 +93,16 @@ interface ESPSNSummaryResponse {
   boxscore?: {
     teams: {
       team: ESPNTeam;
+      homeAway?: string;
       players: {
         athlete: {
           id: string;
           fullName: string;
           displayName: string;
           jersey: string;
-          position: string;
+          position: { name: string; displayName: string; abbreviation: string } | string;
         };
+        starter?: boolean;
         stats?: string[];
       }[];
     }[];
@@ -114,6 +116,7 @@ interface ESPSNSummaryResponse {
     athlete?: { id: string; fullName: string; displayName: string; jersey: string; position: string };
     team?: { id: string; abbreviation: string };
     scoreValue?: number;
+    participants?: { athlete?: { id: string; fullName: string; displayName: string; jersey: string; position: string } }[];
   }[];
   header?: {
     gameId: string;
@@ -136,14 +139,14 @@ function parseESPGameToGame(event: ESPNEvent): Game {
   return {
     id: event.id,
     homeTeam: {
-      id: mappedHome.id,
+      id: homeCompetitor.id, // Use ESPN team ID for correlation with plays
       abbreviation: homeAbbr,
       name: mappedHome.name,
       city: mappedHome.city,
       logo: homeCompetitor.team.logo || `https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${homeAbbr.toLowerCase()}.png`,
     },
     awayTeam: {
-      id: mappedAway.id,
+      id: awayCompetitor.id, // Use ESPN team ID for correlation with plays
       abbreviation: awayAbbr,
       name: mappedAway.name,
       city: mappedAway.city,
@@ -174,7 +177,7 @@ export async function fetchESPNscoreboard(): Promise<Game[]> {
 }
 
 // Fetch play-by-play and boxscore from ESPN summary
-export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByPlayEvent[]; homePlayers: Player[]; awayPlayers: Player[] } | null> {
+export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByPlayEvent[]; homePlayers: Player[]; awayPlayers: Player[]; homeStarters: string[]; awayStarters: string[]; playerPoints: Record<string, number> } | null> {
   try {
     const response = await fetch(`${ESPN_NBA_SUMMARY}?event=${gameId}`);
     if (!response.ok) throw new Error(`ESPN Summary API error: ${response.status}`);
@@ -184,32 +187,47 @@ export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByP
     const plays: PlayByPlayEvent[] = [];
     const homePlayers: Player[] = [];
     const awayPlayers: Player[] = [];
+    const homeStarters: string[] = [];
+    const awayStarters: string[] = [];
+    const playerPoints: Record<string, number> = {};
 
     // Parse boxscore for players
-    if (data.boxscore?.teams) {
-      for (const teamData of data.boxscore.teams) {
-        const teamAbbr = teamData.team.abbreviation;
-        const isHome = !homePlayers.length; // First team is home
+    // Note: players are in data.boxscore.players (flat array), not in teams[].players
+    if (data.boxscore?.players) {
+      // Find PTS index in statistics
+      const ptsIdx = data.boxscore.players[0]?.statistics?.[0]?.names?.indexOf('PTS') ?? 1;
 
-        if (teamData.players) {
-          for (const playerData of teamData.players) {
-            if (!playerData.athlete) continue;
+      for (const playerEntry of data.boxscore.players) {
+        const teamAbbr = playerEntry.team.abbreviation;
+        const isHome = data.boxscore.teams.find(t => t.team.abbreviation === teamAbbr)?.homeAway === 'home';
 
-            const player: Player = {
-              id: playerData.athlete.id,
-              fullName: playerData.athlete.fullName,
-              firstName: playerData.athlete.displayName.split(' ')[0] || playerData.athlete.fullName.split(' ')[0],
-              lastName: playerData.athlete.fullName.split(' ').slice(1).join(' ') || playerData.athlete.fullName,
-              jerseyNumber: playerData.athlete.jersey || '0',
-              teamId: ESPN_TEAM_MAP[teamAbbr]?.id || teamData.team.id,
-              position: playerData.athlete.position || '',
-            };
+        // Athletes are inside statistics[0].athletes
+        const athletes = playerEntry.statistics?.[0]?.athletes || [];
+        for (const athleteEntry of athletes) {
+          if (!athleteEntry.athlete) continue;
 
-            if (isHome) {
-              homePlayers.push(player);
-            } else {
-              awayPlayers.push(player);
-            }
+          const player: Player = {
+            id: athleteEntry.athlete.id,
+            fullName: athleteEntry.athlete.displayName, // ESPN uses displayName as full name
+            firstName: athleteEntry.athlete.displayName.split(' ')[0],
+            lastName: athleteEntry.athlete.displayName.split(' ').slice(1).join(' ') || athleteEntry.athlete.displayName,
+            jerseyNumber: athleteEntry.athlete.jersey || '0',
+            teamId: ESPN_TEAM_MAP[teamAbbr]?.id || playerEntry.team.id,
+            position: typeof athleteEntry.athlete.position === 'string' ? athleteEntry.athlete.position : athleteEntry.athlete.position?.name || '',
+          };
+
+          // Extract points from stats array
+          if (athleteEntry.stats?.[ptsIdx]) {
+            playerPoints[player.id] = parseInt(athleteEntry.stats[ptsIdx]) || 0;
+          }
+
+          // Track starters (players who start the game on court)
+          if (isHome) {
+            homePlayers.push(player);
+            if (athleteEntry.starter) homeStarters.push(player.id);
+          } else {
+            awayPlayers.push(player);
+            if (athleteEntry.starter) awayStarters.push(player.id);
           }
         }
       }
@@ -222,40 +240,38 @@ export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByP
 
         // Detect substitution patterns
         // Pattern: "Player X enters the game for Player Y"
-        const entersMatch = text.match(/^([A-Za-z\s\.]+)\s+enters\s+the\s+game\s+for\s+([A-Za-z\s\.]+)$/);
+        const entersMatch = text.match(/^([A-Za-z\s\.'-]+)\s+enters\s+the\s+game\s+for\s+([A-Za-z\s\.'-]+)$/);
 
         if (entersMatch) {
-          const playerIn = entersMatch[1].trim();
-          const playerOut = entersMatch[2].trim();
+          const playerInName = entersMatch[1].trim();
+          const playerOutName = entersMatch[2].trim();
 
           plays.push({
             gameId,
             eventId: parseInt(play.id) || plays.length,
-            clock: play.clock || '',
+            clock: play.clock?.displayValue || '',
             eventType: 'SUB IN',
-            playerId: play.athlete?.id,
+            playerId: play.participants?.[0]?.athlete?.id,
             teamId: play.team?.id,
             description: text,
-            timestamp: new Date(),
+            timestamp: new Date(play.wallclock || Date.now()),
           });
 
-          // Find the athlete who left (by name matching)
-          // We don't have direct ID, so we track by description
           plays.push({
             gameId,
             eventId: parseInt(play.id) || plays.length + 1,
-            clock: play.clock || '',
+            clock: play.clock?.displayValue || '',
             eventType: 'SUB OUT',
-            playerId: undefined, // Would need to resolve from playerOut name
+            playerId: play.participants?.[1]?.athlete?.id,
             teamId: play.team?.id,
-            description: `${playerOut} SUB OUT`,
-            timestamp: new Date(),
+            description: `${playerOutName} SUB OUT`,
+            timestamp: new Date(play.wallclock || Date.now()),
           });
         }
       }
     }
 
-    return { plays, homePlayers, awayPlayers };
+    return { plays, homePlayers, awayPlayers, homeStarters, awayStarters, playerPoints };
   } catch (error) {
     console.error('[ESPN] Failed to fetch game summary for', gameId, error);
     return null;

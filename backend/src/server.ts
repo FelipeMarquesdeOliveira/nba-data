@@ -59,13 +59,10 @@ async function updatePlayersFromSummary(gameId: string, game: Game): Promise<voi
   const liveState = gameStateService.getLiveState(gameId);
   if (!liveState) return;
 
-  // Process substitution events to track court changes
-  const subEvents = summary.plays.filter(p => p.eventType === 'SUB IN' || p.eventType === 'SUB OUT');
-  if (subEvents.length > 0) {
-    playersOnCourtEngine.processEvents(subEvents);
-  }
+  // IMPORTANT: Don't reprocess all events - just update points from current boxscore
+  // The court state was already correctly initialized from starters + events
 
-  // Update court state and points
+  // Update points from boxscore
   const courtState = playersOnCourtEngine.getPlayersOnCourt(gameId);
   if (courtState) {
     liveState.playersOnCourt.home = summary.homePlayers
@@ -144,7 +141,7 @@ const espnPoller = new ESPNPoller(async (games) => {
           // Process all substitution events to track who is on court
           const subEvents = summary.plays.filter(p => p.eventType === 'SUB IN' || p.eventType === 'SUB OUT');
           if (subEvents.length > 0) {
-            playersOnCourtEngine.processEvents(subEvents);
+            playersOnCourtEngine.processEvents(game.id, { home: summary.homeStarters, away: summary.awayStarters }, subEvents);
           }
 
           // Update live state with players on court
