@@ -4,7 +4,7 @@
 import type { Game, LiveState, PlayerGameStats, PlayByPlayEvent, Team, Player } from '../../shared/src/types/index.js';
 
 const ESPN_NBA_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
-const ESPN_PBP_BASE = 'https://cdn.espn.com/core/nba/playbyplay';
+const ESPN_NBA_SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary';
 
 // Map ESPN team abbreviations to our format
 const ESPN_TEAM_MAP: Record<string, { id: string; name: string; city: string }> = {
@@ -89,6 +89,37 @@ interface ESPSNScoreboardResponse {
   day: { date: string };
 }
 
+interface ESPSNSummaryResponse {
+  boxscore?: {
+    teams: {
+      team: ESPNTeam;
+      players: {
+        athlete: {
+          id: string;
+          fullName: string;
+          displayName: string;
+          jersey: string;
+          position: string;
+        };
+        stats?: string[];
+      }[];
+    }[];
+  };
+  plays?: {
+    id: string;
+    text: string;
+    clock: string;
+    period: number;
+    type: { id: string; text: string };
+    athlete?: { id: string; fullName: string; displayName: string; jersey: string; position: string };
+    team?: { id: string; abbreviation: string };
+    scoreValue?: number;
+  }[];
+  header?: {
+    gameId: string;
+  };
+}
+
 // Parse ESPN game to our Game format
 function parseESPGameToGame(event: ESPNEvent): Game {
   const comp = event.competitions[0];
@@ -140,75 +171,99 @@ export async function fetchESPNscoreboard(): Promise<Game[]> {
   }
 }
 
-// Fetch play-by-play for a specific game
-export async function fetchPlayByPlay(gameId: string): Promise<PlayByPlayEvent[]> {
+// Fetch play-by-play and boxscore from ESPN summary
+export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByPlayEvent[]; homePlayers: Player[]; awayPlayers: Player[] } | null> {
   try {
-    const response = await fetch(`${ESPN_PBP_BASE}?gameId=${gameId}&lang=en&region=us`);
-    if (!response.ok) throw new Error(`ESPN PBP error: ${response.status}`);
+    const response = await fetch(`${ESPN_NBA_SUMMARY}?event=${gameId}`);
+    if (!response.ok) throw new Error(`ESPN Summary API error: ${response.status}`);
 
-    const data = await response.json() as { plays?: { moment: string; text: string; type: { id: string; text: string }; athleteId?: string; teamId?: string }[] };
+    const data: ESPSNSummaryResponse = await response.json() as ESPSNSummaryResponse;
 
-    const plays = data.plays || [];
+    const plays: PlayByPlayEvent[] = [];
+    const homePlayers: Player[] = [];
+    const awayPlayers: Player[] = [];
 
-    return plays
-      .filter((play: { type: { text: string } }) =>
-        play.type.text.includes('Substitution') ||
-        play.type.text.includes('SUB') ||
-        play.type.text.includes('enters') ||
-        play.type.text.includes('OUT')
-      )
-      .map((play: { moment: string; text: string; type: { id: string; text: string }; athleteId?: string; teamId?: string }, index: number) => {
-        const isSubIn = play.text.includes('enters') || play.text.includes('SUB IN') || play.type.text.includes('Substitution');
-        const isSubOut = play.text.includes('for') && (isSubIn || play.text.includes('OUT'));
+    // Parse boxscore for players
+    if (data.boxscore?.teams) {
+      for (const teamData of data.boxscore.teams) {
+        const teamAbbr = teamData.team.abbreviation;
+        const isHome = !homePlayers.length; // First team is home
 
-        return {
-          gameId,
-          eventId: index,
-          clock: play.moment || '',
-          eventType: isSubIn ? 'SUB IN' : isSubOut ? 'SUB OUT' : play.type.text,
-          playerId: play.athleteId,
-          teamId: play.teamId,
-          description: play.text,
-          timestamp: new Date(),
-        };
-      });
+        if (teamData.players) {
+          for (const playerData of teamData.players) {
+            if (!playerData.athlete) continue;
+
+            const player: Player = {
+              id: playerData.athlete.id,
+              fullName: playerData.athlete.fullName,
+              firstName: playerData.athlete.displayName.split(' ')[0] || playerData.athlete.fullName.split(' ')[0],
+              lastName: playerData.athlete.fullName.split(' ').slice(1).join(' ') || playerData.athlete.fullName,
+              jerseyNumber: playerData.athlete.jersey || '0',
+              teamId: ESPN_TEAM_MAP[teamAbbr]?.id || teamData.team.id,
+              position: playerData.athlete.position || '',
+            };
+
+            if (isHome) {
+              homePlayers.push(player);
+            } else {
+              awayPlayers.push(player);
+            }
+          }
+        }
+      }
+    }
+
+    // Parse plays for substitution events
+    if (data.plays) {
+      for (const play of data.plays) {
+        const text = play.text || '';
+
+        // Detect substitution patterns
+        // Pattern: "Player X enters the game for Player Y"
+        const entersMatch = text.match(/^([A-Za-z\s\.]+)\s+enters\s+the\s+game\s+for\s+([A-Za-z\s\.]+)$/);
+
+        if (entersMatch) {
+          const playerIn = entersMatch[1].trim();
+          const playerOut = entersMatch[2].trim();
+
+          plays.push({
+            gameId,
+            eventId: parseInt(play.id) || plays.length,
+            clock: play.clock || '',
+            eventType: 'SUB IN',
+            playerId: play.athlete?.id,
+            teamId: play.team?.id,
+            description: text,
+            timestamp: new Date(),
+          });
+
+          // Find the athlete who left (by name matching)
+          // We don't have direct ID, so we track by description
+          plays.push({
+            gameId,
+            eventId: parseInt(play.id) || plays.length + 1,
+            clock: play.clock || '',
+            eventType: 'SUB OUT',
+            playerId: undefined, // Would need to resolve from playerOut name
+            teamId: play.team?.id,
+            description: `${playerOut} SUB OUT`,
+            timestamp: new Date(),
+          });
+        }
+      }
+    }
+
+    return { plays, homePlayers, awayPlayers };
   } catch (error) {
-    console.error('[ESPN] Failed to fetch PBP for game', gameId, error);
-    return [];
+    console.error('[ESPN] Failed to fetch game summary for', gameId, error);
+    return null;
   }
 }
 
-// Fetch players on court via substitution events
-// This is the SOURCE OF TRUTH when official APIs don't provide court status
-export async function fetchPlayersOnCourtViaPBP(gameId: string): Promise<{ home: string[]; away: string[] }> {
-  const events = await fetchPlayByPlay(gameId);
-
-  // Parse SUB IN events to track who is on court
-  const homeOnCourt = new Set<string>();
-  const awayOnCourt = new Set<string>();
-
-  for (const event of events) {
-    if (!event.playerId || !event.teamId) continue;
-
-    // We need to know which team is home/away - would come from game data
-    // For now, we'll track by player ID and infer from context
-    const isSubIn = event.eventType === 'SUB IN';
-    const isSubOut = event.eventType === 'SUB OUT';
-
-    // Team mapping would be needed here - simplified for now
-    if (isSubIn) {
-      // Player entered - add to on-court set
-      homeOnCourt.add(event.playerId); // Would need to determine correct team
-    } else if (isSubOut) {
-      // Player left - remove from on-court set
-      homeOnCourt.delete(event.playerId);
-    }
-  }
-
-  return {
-    home: Array.from(homeOnCourt),
-    away: Array.from(awayOnCourt),
-  };
+// Fetch play-by-play for substitutions only
+export async function fetchPlayByPlay(gameId: string): Promise<PlayByPlayEvent[]> {
+  const summary = await fetchGameSummary(gameId);
+  return summary?.plays || [];
 }
 
 // Build LiveState from ESPN data
@@ -244,7 +299,7 @@ export class ESPNPoller {
   private callback: (games: Game[]) => void;
   private intervalMs: number;
 
-  constructor(callback: (games: Game[]) => void, intervalMs = 30000) {
+  constructor(callback: (games: Game[]) => void, intervalMs = 10000) {
     this.callback = callback;
     this.intervalMs = intervalMs;
   }
@@ -275,6 +330,3 @@ export class ESPNPoller {
     }
   }
 }
-
-// Export poller class
-export { ESPNPoller as ESNPCPoller };
