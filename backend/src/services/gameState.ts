@@ -1,6 +1,5 @@
 // Game state service - manages live state and broadcasts
 import type { Game, LiveState, PlayerGameStats } from '../../../shared/src/types/index.js';
-import { mockGame, mockLiveState, mockBenchPlayers } from '../../../shared/src/mockData.js';
 
 class GameStateService {
   private games: Map<string, Game> = new Map();
@@ -8,9 +7,7 @@ class GameStateService {
   private subscribers: Set<import('@fastify/websocket').Socket> = new Set();
 
   constructor() {
-    // Initialize with mock data
-    this.games.set(mockGame.id, mockGame);
-    this.liveStates.set(mockGame.id, mockLiveState);
+    // Empty - games populated by ESPN poller or API
   }
 
   // Subscribe to updates
@@ -49,7 +46,7 @@ class GameStateService {
   }
 
   // Get live state for a game
-  getLiveState(gameId: string = mockGame.id): LiveState | undefined {
+  getLiveState(gameId: string): LiveState | undefined {
     return this.liveStates.get(gameId);
   }
 
@@ -115,10 +112,9 @@ class GameStateService {
     }
   }
 
-  // Get bench players for a game
-  getBenchPlayers(gameId: string = mockGame.id): PlayerGameStats[] {
-    // Filter bench by game
-    return mockBenchPlayers.filter(p => p.gameId === gameId);
+  // Get bench players for a game (not on court)
+  getBenchPlayers(_gameId: string): PlayerGameStats[] {
+    return [];
   }
 }
 

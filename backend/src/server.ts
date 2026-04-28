@@ -4,9 +4,10 @@ import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
 import { gameStateService } from './services/gameState.js';
 import { setupWebSocket } from './services/websocket.js';
-import { ESPNPoller, fetchESPNscoreboard, buildLiveStateFromESPN } from './services/espnApi.js';
+import { ESPNPoller, fetchESPNscoreboard, buildLiveStateFromESPN, fetchGameSummary } from './services/espnApi.js';
 import { gameRoutes } from './routes/games.js';
 import { healthCheck } from './routes/health.js';
+import { playersOnCourtEngine } from './services/playersOnCourt.js';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -29,14 +30,56 @@ app.register(gameRoutes, { prefix: '/api/games' });
 
 // WebSocket endpoint
 app.get('/ws/live', { websocket: true }, (socket) => {
+  const ws = socket.socket;
   setupWebSocket(socket);
 
-  // Send initial state
-  const liveState = gameStateService.getLiveState();
-  if (liveState) {
-    socket.send(JSON.stringify({ type: 'INIT', payload: liveState }));
-  }
+  // Send initial state after a tiny delay to ensure socket is ready
+  setTimeout(() => {
+    try {
+      if (ws.readyState === 1) { // OPEN
+        const games = gameStateService.getGames();
+        if (games.length > 0) {
+          const liveState = gameStateService.getLiveState(games[0].id);
+          if (liveState) {
+            ws.send(JSON.stringify({ type: 'INIT', payload: liveState }));
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[WS] Failed to send INIT:', err);
+    }
+  }, 100);
 });
+
+// Update players on court and points from summary (called periodically for live games)
+async function updatePlayersFromSummary(gameId: string, game: Game): Promise<void> {
+  const summary = await fetchGameSummary(gameId);
+  if (!summary) return;
+
+  const liveState = gameStateService.getLiveState(gameId);
+  if (!liveState) return;
+
+  // Process substitution events to track court changes
+  const subEvents = summary.plays.filter(p => p.eventType === 'SUB IN' || p.eventType === 'SUB OUT');
+  if (subEvents.length > 0) {
+    playersOnCourtEngine.processEvents(subEvents);
+  }
+
+  // Update court state and points
+  const courtState = playersOnCourtEngine.getPlayersOnCourt(gameId);
+  if (courtState) {
+    liveState.playersOnCourt.home = summary.homePlayers
+      .filter(p => courtState.home.includes(p.id))
+      .map(p => ({ gameId, playerId: p.id, player: p, points: summary.playerPoints[p.id] || 0, minutes: 0, seconds: 0, isOnCourt: true }));
+
+    liveState.playersOnCourt.away = summary.awayPlayers
+      .filter(p => courtState.away.includes(p.id))
+      .map(p => ({ gameId, playerId: p.id, player: p, points: summary.playerPoints[p.id] || 0, minutes: 0, seconds: 0, isOnCourt: true }));
+
+    // Broadcast update to WebSocket clients
+    gameStateService.broadcast({ type: 'PLAYERS_UPDATE', payload: { gameId, playersOnCourt: liveState.playersOnCourt } });
+  }
+}
 
 // Start ESPN poller for real games
 const espnPoller = new ESPNPoller(async (games) => {
@@ -45,7 +88,7 @@ const espnPoller = new ESPNPoller(async (games) => {
     const existing = gameStateService.getLiveState(game.id);
 
     if (existing) {
-      // Update existing live game
+      // Update existing live game - just update score for speed
       gameStateService.updateGameScore(
         game.id,
         game.homeScore,
@@ -54,7 +97,7 @@ const espnPoller = new ESPNPoller(async (games) => {
         game.clock
       );
     } else {
-      // New live game - create live state
+      // New live game - create live state with full summary
       const liveState = await buildLiveStateFromESPN({
         id: game.id,
         date: game.gameTime,
@@ -80,6 +123,42 @@ const espnPoller = new ESPNPoller(async (games) => {
         // Initialize live state for new game
         gameStateService['liveStates'].set(game.id, liveState);
         gameStateService['games'].set(game.id, game);
+
+        // Fetch full game summary to get players and substitutions
+        const summary = await fetchGameSummary(game.id);
+        if (summary) {
+          // Initialize starting lineup with starters only (5 per team)
+          playersOnCourtEngine.initializeGame(game.id, summary.homeStarters, summary.awayStarters);
+
+          // Store team mapping for later resolution
+          playersOnCourtEngine.setTeamMapping(game.id, game.homeTeam.abbreviation, game.awayTeam.abbreviation);
+          playersOnCourtEngine.setTeamIdMapping(game.id, game.homeTeam.id, game.awayTeam.id);
+
+          // Register player names for name resolution
+          const allPlayers = [
+            ...summary.homePlayers.map(p => ({ ...p, teamAbbr: game.homeTeam.abbreviation })),
+            ...summary.awayPlayers.map(p => ({ ...p, teamAbbr: game.awayTeam.abbreviation })),
+          ];
+          playersOnCourtEngine.registerPlayers(game.id, allPlayers);
+
+          // Process all substitution events to track who is on court
+          const subEvents = summary.plays.filter(p => p.eventType === 'SUB IN' || p.eventType === 'SUB OUT');
+          if (subEvents.length > 0) {
+            playersOnCourtEngine.processEvents(subEvents);
+          }
+
+          // Update live state with players on court
+          const courtState = playersOnCourtEngine.getPlayersOnCourt(game.id);
+          if (courtState) {
+            liveState.playersOnCourt.home = summary.homePlayers
+              .filter(p => courtState.home.includes(p.id))
+              .map(p => ({ gameId: game.id, playerId: p.id, player: p, points: summary.playerPoints[p.id] || 0, minutes: 0, seconds: 0, isOnCourt: true }));
+
+            liveState.playersOnCourt.away = summary.awayPlayers
+              .filter(p => courtState.away.includes(p.id))
+              .map(p => ({ gameId: game.id, playerId: p.id, player: p, points: summary.playerPoints[p.id] || 0, minutes: 0, seconds: 0, isOnCourt: true }));
+          }
+        }
       }
     }
   }
@@ -106,6 +185,18 @@ async function start() {
     if (liveGames.length > 0) {
       app.log.info(`📺 Found ${liveGames.length} live game(s) from ESPN`);
       espnPoller.start();
+
+      // Also start a player update interval for live games (every 10 seconds)
+      setInterval(async () => {
+        const liveGamesList = gameStateService.getGames().filter(g => g.status === 'In Progress');
+        for (const game of liveGamesList) {
+          try {
+            await updatePlayersFromSummary(game.id, game);
+          } catch (err) {
+            app.log.error(`[ESPN] Failed to update players for game ${game.id}:`, err);
+          }
+        }
+      }, 10000); // Update players every 10 seconds for near real-time data
     } else {
       app.log.info('📺 No live games found, starting mock replayer for development');
       // Import and start mock replayer only when needed

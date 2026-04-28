@@ -1,42 +1,49 @@
 // WebSocket setup and management
-import type { Socket } from 'socket.io';
+import type { WebSocket } from 'ws';
 import { gameStateService } from './gameState.js';
 
-export function setupWebSocket(socket: Socket): void {
-  gameStateService.subscribe(socket);
+// @fastify/websocket wraps WebSocket, actual socket is at .socket
+interface FastifyWebSocketWrapper {
+  socket: WebSocket;
+  on(event: string, handler: (...args: unknown[]) => void): void;
+}
 
-  socket.on('message', (data) => {
+export function setupWebSocket(socket: FastifyWebSocketWrapper): void {
+  const ws = socket.socket;
+
+  gameStateService.subscribe(ws);
+
+  ws.on('message', (data: unknown) => {
     try {
       const message = JSON.parse(data.toString());
 
       switch (message.type) {
         case 'SUBSCRIBE_GAME':
-          // Could filter by game ID
-          socket.send(JSON.stringify({
+          ws.send(JSON.stringify({
             type: 'SUBSCRIBED',
             payload: { gameId: message.payload?.gameId },
           }));
           break;
 
         case 'PING':
-          socket.send(JSON.stringify({ type: 'PONG' }));
+          ws.send(JSON.stringify({ type: 'PONG' }));
           break;
 
         default:
-          socket.send(JSON.stringify({
+          ws.send(JSON.stringify({
             type: 'ERROR',
             payload: { message: 'Unknown message type' },
           }));
       }
     } catch {
-      socket.send(JSON.stringify({
+      ws.send(JSON.stringify({
         type: 'ERROR',
         payload: { message: 'Invalid JSON' },
       }));
     }
   });
 
-  socket.on('close', () => {
+  ws.on('close', () => {
     // Cleanup handled in gameStateService
   });
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import type { Game, CourtStatus } from '@/types';
+import { useState, useEffect, useRef } from 'react';
+import type { Game, CourtStatus, PlayerGameStats } from '@/types';
 import { getCourtStatus, formatGameTime } from '@/types';
 import GameCard from '@/components/GameCard';
 
@@ -76,11 +76,11 @@ export default function Home() {
             <button className="flex-1 py-1.5 bg-[#1A1A1A] text-xs font-medium rounded text-gray-400 hover:text-white transition-colors">+1d</button>
           </div>
           <div className="relative">
-            <input 
-              type="text" 
-              value="27/04/2026" 
-              className="w-full bg-[#1A1A1A] border border-[#262626] text-xs text-gray-300 rounded px-3 py-2.5 outline-none" 
-              readOnly 
+            <input
+              type="text"
+              value="27/04/2026"
+              className="w-full bg-[#1A1A1A] border border-[#262626] text-xs text-gray-300 rounded px-3 py-2.5 outline-none"
+              readOnly
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">📅</span>
           </div>
@@ -148,6 +148,122 @@ function FilterButton({ label, count, active, onClick }: { label: string, count:
 
 function GameDetail({ game }: { game: Game }) {
   const status = getCourtStatus(game);
+  const [playersData, setPlayersData] = useState<{ home: PlayerGameStats[]; away: PlayerGameStats[] } | null>(null);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [notifications, setNotifications] = useState<string[]>([]);
+  const previousPlayersRef = useRef<{ home: string[]; away: string[] } | null>(null);
+
+  // WebSocket for real-time updates
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+    let isMounted = true;
+    const gameId = game.id;
+
+    function connect() {
+      if (!isMounted || !gameId) return;
+      if (ws?.readyState === WebSocket.OPEN) return;
+
+      try {
+        ws = new WebSocket('ws://localhost:3001/ws/live');
+
+        ws.onopen = () => {
+          if (!isMounted) return;
+          console.log('[WS] Connected to game:', gameId);
+          setWsConnected(true);
+        };
+
+        ws.onclose = () => {
+          if (!isMounted) return;
+          console.log('[WS] Disconnected from game:', gameId);
+          setWsConnected(false);
+          ws = null;
+        };
+
+        ws.onerror = (error) => {
+          if (!isMounted) return;
+          console.error('[WS] Error:', error);
+        };
+
+        ws.onmessage = (event) => {
+          if (!isMounted) return;
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'PLAYERS_UPDATE' && msg.payload?.gameId === gameId) {
+              const newData = msg.payload.playersOnCourt;
+
+              // Detect substitutions - prev.home/away are string[] (playerIds), newData.home/away are PlayerGameStats[]
+              const prev = previousPlayersRef.current;
+              if (prev) {
+                const homeIn = newData.home.filter(p => !prev.home.includes(p.playerId));
+                const homeOut = prev.home.filter(id => !newData.home.some(p => p.playerId === id));
+                const awayIn = newData.away.filter(p => !prev.away.includes(p.playerId));
+                const awayOut = prev.away.filter(id => !newData.away.some(p => p.playerId === id));
+
+                if (homeIn.length > 0 || homeOut.length > 0) {
+                  const team = game.homeTeam.abbreviation;
+                  if (homeIn.length > 0) setNotifications(n => [...n, `⬆️ ${homeIn.map(p => p.player.fullName).join(', ')} entered for ${team}`]);
+                  if (homeOut.length > 0) setNotifications(n => [...n, `⬇️ ${awayOut.map(id => findPlayerName(id, prev.home) || id).join(', ')} left ${team}`]);
+                }
+                if (awayIn.length > 0 || awayOut.length > 0) {
+                  const team = game.awayTeam.abbreviation;
+                  if (awayIn.length > 0) setNotifications(n => [...n, `⬆️ ${awayIn.map(p => p.player.fullName).join(', ')} entered for ${team}`]);
+                  if (awayOut.length > 0) setNotifications(n => [...n, `⬇️ ${awayOut.map(id => findPlayerName(id, prev.away) || id).join(', ')} left ${team}`]);
+                }
+              }
+
+              previousPlayersRef.current = {
+                home: newData.home.map(p => p.playerId),
+                away: newData.away.map(p => p.playerId),
+              };
+              setPlayersData(newData);
+            }
+          } catch {
+            // ignore parse errors
+          }
+        };
+      } catch (e) {
+        console.error('[WS] Connection error:', e);
+      }
+    }
+
+    reconnectTimer = setTimeout(connect, 500);
+
+    return () => {
+      isMounted = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+        ws = null;
+      }
+    };
+  }, [game.id]);
+
+  // Helper to find player name by ID
+  function findPlayerName(playerId: string, players: PlayerGameStats[]): string | undefined {
+    return players.find(p => p.playerId === playerId)?.player.fullName;
+  }
+
+  // Initial fetch + periodic refresh
+  useEffect(() => {
+    if (game.status === 'In Progress' || game.status === 'Final') {
+      setLoadingPlayers(true);
+      fetch(`${API_URL}/api/games/${game.id}/players`)
+        .then(res => res.json())
+        .then(data => {
+          const onCourt = data.data?.onCourt || { home: [], away: [] };
+          setPlayersData(onCourt);
+          previousPlayersRef.current = {
+            home: onCourt.home.map(p => p.playerId),
+            away: onCourt.away.map(p => p.playerId),
+          };
+        })
+        .catch(err => console.error('Failed to fetch players:', err))
+        .finally(() => setLoadingPlayers(false));
+    }
+  }, [game]);
 
   const statusConfig = {
     LIVE: { label: 'LIVE', class: 'status-live', dotClass: 'bg-red-500 animate-pulse-live' },
@@ -160,6 +276,23 @@ function GameDetail({ game }: { game: Game }) {
 
   return (
     <div className="bg-[#121212] border border-[#1A1A1A] rounded-xl p-8 max-w-4xl mx-auto mt-8">
+      {/* Substitution Notifications */}
+      {notifications.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 space-y-2 max-w-xs">
+          {notifications.slice(-3).map((notif, i) => (
+            <div key={i} className="bg-[#1A1A1A] border border-[#333] rounded-lg px-4 py-3 text-sm animate-pulse">
+              {notif}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* WebSocket Status */}
+      <div className="absolute top-4 right-4 flex items-center gap-2 text-xs">
+        <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+        <span className="text-gray-500">{wsConnected ? 'Live' : 'Disconnected'}</span>
+      </div>
+
       {/* Game Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
@@ -214,12 +347,55 @@ function GameDetail({ game }: { game: Game }) {
         </div>
       </div>
 
-      {/* Players Placeholder */}
+      {/* Players on Court */}
       <div className="border-t border-[#1A1A1A] pt-8">
         <h3 className="text-xs font-bold tracking-widest text-gray-500 uppercase mb-6">Players on Court</h3>
-        <div className="bg-[#0A0A0A] rounded-lg p-12 text-center border border-[#1A1A1A] border-dashed">
-          <p className="text-gray-500 text-sm">Player tracking data and props will be displayed here</p>
-        </div>
+        {loadingPlayers ? (
+          <div className="bg-[#0A0A0A] rounded-lg p-12 text-center border border-[#1A1A1A] border-dashed">
+            <p className="text-gray-500 text-sm">Loading players...</p>
+          </div>
+        ) : playersData && (playersData.home.length > 0 || playersData.away.length > 0) ? (
+          <div className="grid grid-cols-2 gap-8">
+            <div className="bg-[#0A0A0A] rounded-lg p-6 border border-[#1A1A1A]">
+              <p className="text-xs text-gray-500 uppercase mb-4">{game.awayTeam.abbreviation} (Away)</p>
+              <div className="space-y-3">
+                {playersData.away.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 text-center text-gray-600 font-mono text-xs">{p.player.jerseyNumber}</span>
+                      <div>
+                        <p className="text-sm font-medium">{p.player.fullName}</p>
+                        <p className="text-xs text-gray-500">{p.player.position}</p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-sm text-white">{p.points} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-[#0A0A0A] rounded-lg p-6 border border-[#1A1A1A]">
+              <p className="text-xs text-gray-500 uppercase mb-4">{game.homeTeam.abbreviation} (Home)</p>
+              <div className="space-y-3">
+                {playersData.home.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 text-center text-gray-600 font-mono text-xs">{p.player.jerseyNumber}</span>
+                      <div>
+                        <p className="text-sm font-medium">{p.player.fullName}</p>
+                        <p className="text-xs text-gray-500">{p.player.position}</p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-sm text-white">{p.points} pts</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-[#0A0A0A] rounded-lg p-12 text-center border border-[#1A1A1A] border-dashed">
+            <p className="text-gray-500 text-sm">Player tracking data will be updated during live games</p>
+          </div>
+        )}
       </div>
     </div>
   );
