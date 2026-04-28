@@ -40,6 +40,24 @@ body {
   background: var(--dark-600);
 }
 
+/* Custom Scrollbar for Sidebar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--dark-700);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--dark-500);
+}
+
 /* Status badge styles */
 .status-live {
   @apply bg-red-500/20 text-red-400 border border-red-500/30;

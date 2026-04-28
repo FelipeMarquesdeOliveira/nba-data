@@ -1,4 +1,4 @@
-import type { Game, Player, PlayerGameStats, PlayByPlayEvent, LiveState } from '../src/types/index.js';
+import type { Game, Team, Player, PlayerGameStats, PlayByPlayEvent, LiveState } from './types/index.js';
 
 // Teams
 export const LAL: Team = {

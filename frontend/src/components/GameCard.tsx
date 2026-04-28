@@ -13,10 +13,10 @@ export default function GameCard({ game, isSelected, onClick }: GameCardProps) {
   const status = getCourtStatus(game);
 
   const statusConfig = {
-    LIVE: { label: 'LIVE', class: 'status-live', dotClass: 'bg-red-500 animate-pulse-live' },
-    SOON: { label: 'SOON', class: 'status-soon', dotClass: 'bg-yellow-500' },
-    FUTURE: { label: 'FUTURE', class: 'status-future', dotClass: 'bg-blue-500' },
-    FINISHED: { label: 'FINISHED', class: 'status-finished', dotClass: 'bg-gray-500' },
+    LIVE: { label: 'LIVE', class: 'bg-red-900/30 text-red-500 border border-red-900/50', dotClass: 'bg-red-500 animate-pulse-live' },
+    SOON: { label: 'PRE', class: 'bg-blue-900/30 text-blue-500 border border-blue-900/50', dotClass: '' },
+    FUTURE: { label: 'PRE', class: 'bg-blue-900/30 text-blue-500 border border-blue-900/50', dotClass: '' },
+    FINISHED: { label: 'FINAL', class: 'bg-[#262626] text-gray-400 border border-[#333]', dotClass: '' },
   };
 
   const config = statusConfig[status];
@@ -24,57 +24,48 @@ export default function GameCard({ game, isSelected, onClick }: GameCardProps) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left p-4 rounded-xl transition-all ${
+      className={`w-full text-left p-3 rounded-lg transition-all border ${
         isSelected
-          ? 'bg-[#262626] ring-1 ring-[#404040]'
-          : 'bg-[#1A1A1A] hover:bg-[#262626]'
+          ? 'bg-[#1A1A1A] border-[#333]'
+          : 'bg-transparent border-transparent hover:bg-[#1A1A1A]/50'
       }`}
     >
       <div className="flex items-center justify-between mb-3">
-        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${config.class}`}>
-          <span className={`w-1 h-1 rounded-full ${config.dotClass} inline-block mr-1`} />
+        <span className={`px-1.5 py-0.5 rounded flex items-center gap-1.5 text-[10px] font-bold ${config.class}`}>
+          {config.dotClass && <span className={`w-1.5 h-1.5 rounded-full ${config.dotClass}`} />}
           {config.label}
         </span>
-        <span className="text-xs text-gray-400">
+        <span className="text-[11px] text-gray-500 font-mono">
           {status === 'LIVE' ? (
-            <span className="font-mono">{game.clock}</span>
+             `${game.quarter}Q - ${game.clock}`
+          ) : status === 'FINISHED' ? (
+             ''
           ) : (
             formatGameTime(game.gameTime)
           )}
         </span>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#333333] flex items-center justify-center text-xs font-bold">
-            {game.awayTeam.abbreviation}
-          </div>
-          <span className="text-sm font-medium">{game.awayTeam.abbreviation}</span>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+           <div className="flex items-center gap-2">
+             <span className="text-[10px] text-gray-600 font-mono w-4">@</span>
+             <span className="text-sm font-bold text-gray-200">{game.awayTeam.abbreviation}</span>
+           </div>
+           <span className={`font-mono font-bold text-sm ${status === 'LIVE' ? 'text-white' : 'text-gray-300'}`}>
+             {game.status !== 'Scheduled' ? game.awayScore : ''}
+           </span>
         </div>
-
-        {game.status !== 'Scheduled' ? (
-          <div className="text-center">
-            <span className="font-mono text-lg font-bold">{game.awayScore}</span>
-            <span className="text-gray-500 mx-1">-</span>
-            <span className="font-mono text-lg font-bold">{game.homeScore}</span>
-          </div>
-        ) : (
-          <span className="text-xs text-gray-500">vs</span>
-        )}
-
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium">{game.homeTeam.abbreviation}</span>
-          <div className="w-8 h-8 rounded-full bg-[#333333] flex items-center justify-center text-xs font-bold">
-            {game.homeTeam.abbreviation}
-          </div>
+        <div className="flex items-center justify-between">
+           <div className="flex items-center gap-2">
+             <span className="text-[10px] text-gray-600 font-mono w-4">vs</span>
+             <span className="text-sm font-bold text-gray-200">{game.homeTeam.abbreviation}</span>
+           </div>
+           <span className={`font-mono font-bold text-sm ${status === 'LIVE' ? 'text-white' : 'text-gray-300'}`}>
+             {game.status !== 'Scheduled' ? game.homeScore : ''}
+           </span>
         </div>
       </div>
-
-      {status === 'LIVE' && game.quarter && (
-        <div className="mt-2 text-xs text-gray-400">
-          Q{game.quarter} • Last event: J. Tatum 3pt
-        </div>
-      )}
     </button>
   );
 }

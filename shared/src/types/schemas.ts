@@ -111,7 +111,7 @@ export const OCRRawResultSchema = z.object({
 export const AICleanedResultSchema = z.object({
   gameId: z.string(),
   provider: z.string(),
-  playerLines: z.array(z.object({
+  cleanedLines: z.array(z.object({ // Support both naming conventions
     playerId: z.string(),
     lineValue: z.number(),
     confidence: z.number().min(0).max(1),

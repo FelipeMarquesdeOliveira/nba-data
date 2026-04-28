@@ -1,7 +1,7 @@
 // Players on Court Engine - infers who is on court by parsing PBP substitution events
 // This is the SOURCE OF TRUTH for court status when official APIs don't provide it
 
-import type { PlayerGameStats, PlayByPlayEvent } from '@nba-shared/types';
+import type { PlayerGameStats, PlayByPlayEvent } from '../../../shared/src/types/index.js';
 
 // Track which players are on court for each team in a game
 interface CourtState {

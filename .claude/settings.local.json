@@ -1,19 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Read(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Write(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Bash(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Edit(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Glob(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Grep(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Agent(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Task(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Todo(C:/Users/Felipe Marques/Desktop/nba_data/*)",
-      "Skill(update-config)"
-    ],
-    "additionalDirectories": [
-      "C:/Users/Felipe Marques/Desktop/nba_data"
+      "Skill(update-config)",
+      "PowerShell(Get-NetTCPConnection *)"
     ]
   }
 }

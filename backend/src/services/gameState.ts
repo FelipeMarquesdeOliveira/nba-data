@@ -1,6 +1,6 @@
 // Game state service - manages live state and broadcasts
-import type { Game, LiveState, PlayerGameStats } from '@nba-shared/types';
-import { mockGame, mockLiveState, mockBenchPlayers } from '@nba-shared/mockData';
+import type { Game, LiveState, PlayerGameStats } from '../../../shared/src/types/index.js';
+import { mockGame, mockLiveState, mockBenchPlayers } from '../../../shared/src/mockData.js';
 
 class GameStateService {
   private games: Map<string, Game> = new Map();
