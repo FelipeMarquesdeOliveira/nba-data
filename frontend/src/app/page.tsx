@@ -3,19 +3,29 @@
 import { useState, useEffect } from 'react';
 import type { Game, CourtStatus } from '@/types';
 import { getCourtStatus, formatGameTime } from '@/types';
-import { mockGamesList } from '@/lib/mockData';
 import GameCard from '@/components/GameCard';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 export default function Home() {
-  const [games, setGames] = useState<Game[]>(mockGamesList);
+  const [games, setGames] = useState<Game[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'all' | 'live' | 'soon' | 'final'>('all');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // In production, would fetch from API:
-    // fetch('http://localhost:3001/api/games')
-    //   .then(res => res.json())
-    //   .then(data => setGames(data.data));
+    async function fetchGames() {
+      try {
+        const res = await fetch(`${API_URL}/api/games`);
+        const data = await res.json();
+        setGames(data.data || []);
+      } catch (error) {
+        console.error('Failed to fetch games:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchGames();
   }, []);
 
   const filteredGames = games.filter(game => {
@@ -33,6 +43,17 @@ export default function Home() {
     soon: games.filter(g => getCourtStatus(g) === 'SOON' || getCourtStatus(g) === 'FUTURE').length,
     finished: games.filter(g => getCourtStatus(g) === 'FINISHED').length,
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-[#0A0A0A] text-white items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-bounce">🏀</div>
+          <p className="text-sm text-gray-400">Loading games...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#0A0A0A] text-white overflow-hidden font-sans">
@@ -160,9 +181,13 @@ function GameDetail({ game }: { game: Game }) {
       {/* Teams & Score */}
       <div className="flex items-center justify-between mb-10">
         <div className="flex items-center gap-6 w-1/3">
-          <div className="w-16 h-16 rounded-full bg-[#1A1A1A] border border-[#262626] flex items-center justify-center text-xl font-bold">
-            {game.awayTeam.abbreviation}
-          </div>
+          {game.awayTeam.logo ? (
+            <img src={game.awayTeam.logo} alt={game.awayTeam.abbreviation} className="w-16 h-16 rounded-full object-contain" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-[#1A1A1A] border border-[#262626] flex items-center justify-center text-xl font-bold">
+              {game.awayTeam.abbreviation}
+            </div>
+          )}
           <div>
             <p className="text-xl font-bold">{game.awayTeam.city} {game.awayTeam.name}</p>
             <p className="text-sm text-gray-500">Away</p>
@@ -179,9 +204,13 @@ function GameDetail({ game }: { game: Game }) {
             <p className="text-xl font-bold">{game.homeTeam.city} {game.homeTeam.name}</p>
             <p className="text-sm text-gray-500">Home</p>
           </div>
-          <div className="w-16 h-16 rounded-full bg-[#1A1A1A] border border-[#262626] flex items-center justify-center text-xl font-bold">
-            {game.homeTeam.abbreviation}
-          </div>
+          {game.homeTeam.logo ? (
+            <img src={game.homeTeam.logo} alt={game.homeTeam.abbreviation} className="w-16 h-16 rounded-full object-contain" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-[#1A1A1A] border border-[#262626] flex items-center justify-center text-xl font-bold">
+              {game.homeTeam.abbreviation}
+            </div>
+          )}
         </div>
       </div>
 

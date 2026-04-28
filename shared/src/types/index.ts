@@ -11,6 +11,7 @@ export interface Team {
   abbreviation: string; // LAL, BOS, GSW
   name: string;
   city: string;
+  logo?: string; // URL to team logo
 }
 
 export interface Player {

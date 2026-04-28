@@ -49,6 +49,9 @@ export default function GameCard({ game, isSelected, onClick }: GameCardProps) {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
            <div className="flex items-center gap-2">
+             {game.awayTeam.logo && (
+               <img src={game.awayTeam.logo} alt={game.awayTeam.abbreviation} className="w-5 h-5 object-contain" />
+             )}
              <span className="text-[10px] text-gray-600 font-mono w-4">@</span>
              <span className="text-sm font-bold text-gray-200">{game.awayTeam.abbreviation}</span>
            </div>
@@ -60,6 +63,9 @@ export default function GameCard({ game, isSelected, onClick }: GameCardProps) {
            <div className="flex items-center gap-2">
              <span className="text-[10px] text-gray-600 font-mono w-4">vs</span>
              <span className="text-sm font-bold text-gray-200">{game.homeTeam.abbreviation}</span>
+             {game.homeTeam.logo && (
+               <img src={game.homeTeam.logo} alt={game.homeTeam.abbreviation} className="w-5 h-5 object-contain" />
+             )}
            </div>
            <span className={`font-mono font-bold text-sm ${status === 'LIVE' ? 'text-white' : 'text-gray-300'}`}>
              {game.status !== 'Scheduled' ? game.homeScore : ''}
