@@ -39,6 +39,10 @@ export const mockLiveState: LiveState = {
       { gameId: '0022300123', playerId: '203496', player: lakersPlayers[4], points: 6, minutes: 24, seconds: 55, isOnCourt: true, rebounds: 3, assists: 1, lineValue: 12.5, lineProvider: 'Parimatch' },
     ],
   },
+  players: {
+    home: celticsPlayers,
+    away: lakersPlayers,
+  },
   lastEvent: 'Jayson Tatum 3pt Shot (28 pts)',
   lastEventTime: new Date().toISOString(),
   possession: 'home',

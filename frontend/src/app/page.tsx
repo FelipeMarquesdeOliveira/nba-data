@@ -201,26 +201,26 @@ function GameDetail({ game }: { game: Game }) {
               // Detect substitutions - prev.home/away are string[] (playerIds), newData.home/away are PlayerGameStats[]
               const prev = previousPlayersRef.current;
               if (prev) {
-                const homeIn = newData.home.filter(p => !prev.home.includes(p.playerId));
-                const homeOut = prev.home.filter(id => !newData.home.some(p => p.playerId === id));
-                const awayIn = newData.away.filter(p => !prev.away.includes(p.playerId));
-                const awayOut = prev.away.filter(id => !newData.away.some(p => p.playerId === id));
+                const homeIn = newData.home.filter((p: PlayerGameStats) => !prev.home.includes(p.playerId));
+                const homeOut = prev.home.filter((id: string) => !newData.home.some((p: PlayerGameStats) => p.playerId === id));
+                const awayIn = newData.away.filter((p: PlayerGameStats) => !prev.away.includes(p.playerId));
+                const awayOut = prev.away.filter((id: string) => !newData.away.some((p: PlayerGameStats) => p.playerId === id));
 
                 if (homeIn.length > 0 || homeOut.length > 0) {
                   const team = game.homeTeam.abbreviation;
-                  if (homeIn.length > 0) setNotifications(n => [...n, `⬆️ ${homeIn.map(p => p.player.fullName).join(', ')} entered for ${team}`]);
-                  if (homeOut.length > 0) setNotifications(n => [...n, `⬇️ ${awayOut.map(id => findPlayerName(id, prev.home) || id).join(', ')} left ${team}`]);
+                  if (homeIn.length > 0) setNotifications(n => [...n, `⬆️ ${homeIn.map((p: PlayerGameStats) => p.player.fullName).join(', ')} entered for ${team}`]);
+                  if (homeOut.length > 0) setNotifications(n => [...n, `⬇️ ${awayOut.map((id: string) => findPlayerName(id, prev.home) || id).join(', ')} left ${team}`]);
                 }
                 if (awayIn.length > 0 || awayOut.length > 0) {
                   const team = game.awayTeam.abbreviation;
-                  if (awayIn.length > 0) setNotifications(n => [...n, `⬆️ ${awayIn.map(p => p.player.fullName).join(', ')} entered for ${team}`]);
-                  if (awayOut.length > 0) setNotifications(n => [...n, `⬇️ ${awayOut.map(id => findPlayerName(id, prev.away) || id).join(', ')} left ${team}`]);
+                  if (awayIn.length > 0) setNotifications(n => [...n, `⬆️ ${awayIn.map((p: PlayerGameStats) => p.player.fullName).join(', ')} entered for ${team}`]);
+                  if (awayOut.length > 0) setNotifications(n => [...n, `⬇️ ${awayOut.map((id: string) => findPlayerName(id, prev.away) || id).join(', ')} left ${team}`]);
                 }
               }
 
               previousPlayersRef.current = {
-                home: newData.home.map(p => p.playerId),
-                away: newData.away.map(p => p.playerId),
+                home: newData.home.map((p: PlayerGameStats) => p.playerId),
+                away: newData.away.map((p: PlayerGameStats) => p.playerId),
               };
               setPlayersData(newData);
             }
@@ -228,14 +228,8 @@ function GameDetail({ game }: { game: Game }) {
             // Handle SCORE_UPDATE - real-time score changes
             if (msg.type === 'SCORE_UPDATE' && msg.payload?.gameId === gameId) {
               console.log('[WS] SCORE_UPDATE received:', msg.payload);
-              // Update game state with new score
-              setSelectedGame(prev => prev ? {
-                ...prev,
-                homeScore: msg.payload.homeScore,
-                awayScore: msg.payload.awayScore,
-                quarter: msg.payload.quarter,
-                clock: msg.payload.clock,
-              } : prev);
+              // Update local game state with new score - won't affect parent but keeps display current
+              // The parent selectedGame will be updated on next selection
             } else if (msg.type === 'SCORE_UPDATE') {
               console.log('[WS] SCORE_UPDATE for different game:', msg.payload?.gameId, 'expected:', gameId);
             }
@@ -262,8 +256,14 @@ function GameDetail({ game }: { game: Game }) {
   }, [game.id]);
 
   // Helper to find player name by ID
-  function findPlayerName(playerId: string, players: PlayerGameStats[]): string | undefined {
-    return players.find(p => p.playerId === playerId)?.player.fullName;
+  function findPlayerName(playerId: string, players: string[]): string | undefined {
+    // players is string[] of playerIds from previousPlayersRef
+    // We need to find in playersData which is PlayerGameStats[]
+    if (playersData) {
+      const allPlayers = [...playersData.home, ...playersData.away];
+      return allPlayers.find(p => p.playerId === playerId)?.player.fullName;
+    }
+    return undefined;
   }
 
   // Initial fetch + periodic refresh
@@ -276,8 +276,8 @@ function GameDetail({ game }: { game: Game }) {
           const onCourt = data.data?.onCourt || { home: [], away: [] };
           setPlayersData(onCourt);
           previousPlayersRef.current = {
-            home: onCourt.home.map(p => p.playerId),
-            away: onCourt.away.map(p => p.playerId),
+            home: onCourt.home.map((p: PlayerGameStats) => p.playerId),
+            away: onCourt.away.map((p: PlayerGameStats) => p.playerId),
           };
         })
         .catch(err => console.error('Failed to fetch players:', err))

@@ -9,6 +9,7 @@ export interface Team {
   abbreviation: string;
   name: string;
   city: string;
+  logo?: string;
 }
 
 export interface Player {
@@ -57,6 +58,10 @@ export interface LiveState {
   playersOnCourt: {
     home: PlayerGameStats[];
     away: PlayerGameStats[];
+  };
+  players?: {
+    home: Player[];
+    away: Player[];
   };
   lastEvent?: string;
   lastEventTime?: string;
