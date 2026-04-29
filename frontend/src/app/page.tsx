@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { Game, CourtStatus, PlayerGameStats } from '@/types';
 import { getCourtStatus, formatGameTime } from '@/types';
 import GameCard from '@/components/GameCard';
+import ScoreDisplay from '@/components/ScoreDisplay';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -170,7 +171,7 @@ function GameDetail({ game }: { game: Game }) {
 
         ws.onopen = () => {
           if (!isMounted) return;
-          console.log('[WS] Connected to game:', gameId);
+          console.log('[WS] Connected, listening for updates on game:', gameId);
           setWsConnected(true);
         };
 
@@ -224,6 +225,7 @@ function GameDetail({ game }: { game: Game }) {
 
             // Handle SCORE_UPDATE - real-time score changes
             if (msg.type === 'SCORE_UPDATE' && msg.payload?.gameId === gameId) {
+              console.log('[WS] SCORE_UPDATE received:', msg.payload);
               // Update game state with new score
               setSelectedGame(prev => prev ? {
                 ...prev,
@@ -232,6 +234,8 @@ function GameDetail({ game }: { game: Game }) {
                 quarter: msg.payload.quarter,
                 clock: msg.payload.clock,
               } : prev);
+            } else if (msg.type === 'SCORE_UPDATE') {
+              console.log('[WS] SCORE_UPDATE for different game:', msg.payload?.gameId, 'expected:', gameId);
             }
           } catch {
             // ignore parse errors
@@ -341,10 +345,12 @@ function GameDetail({ game }: { game: Game }) {
           </div>
         </div>
         <div className="text-center w-1/3">
-          <div className="text-5xl font-bold font-mono tracking-wider">
-            {game.awayScore} - {game.homeScore}
-          </div>
-          <p className="text-xs text-gray-500 mt-2 uppercase tracking-widest">Current Score</p>
+          <ScoreDisplay
+            homeScore={game.homeScore}
+            awayScore={game.awayScore}
+            quarter={game.quarter}
+            clock={game.clock}
+          />
         </div>
         <div className="flex items-center justify-end gap-6 w-1/3">
           <div className="text-right">
