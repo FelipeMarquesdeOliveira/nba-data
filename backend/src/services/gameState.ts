@@ -116,6 +116,14 @@ class GameStateService {
   getBenchPlayers(_gameId: string): PlayerGameStats[] {
     return [];
   }
+
+  // Set full player list (with status) for a game
+  setPlayers(gameId: string, players: { home: import('../../../shared/src/types/index.js').Player[]; away: import('../../../shared/src/types/index.js').Player[] }): void {
+    const live = this.liveStates.get(gameId);
+    if (live) {
+      live.players = players;
+    }
+  }
 }
 
 // Singleton

@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { Game, CourtStatus, PlayerGameStats } from '@/types';
+import type { Game, CourtStatus, PlayerGameStats, Player } from '@/types';
 import { getCourtStatus, formatGameTime } from '@/types';
 import GameCard from '@/components/GameCard';
 import ScoreDisplay from '@/components/ScoreDisplay';
+import ExpectedLineup from '@/components/ExpectedLineup';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -150,6 +151,7 @@ function FilterButton({ label, count, active, onClick }: { label: string, count:
 function GameDetail({ game }: { game: Game }) {
   const status = getCourtStatus(game);
   const [playersData, setPlayersData] = useState<{ home: PlayerGameStats[]; away: PlayerGameStats[] } | null>(null);
+  const [lineupData, setLineupData] = useState<{ home: Player[]; away: Player[] } | null>(null);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [notifications, setNotifications] = useState<string[]>([]);
@@ -280,6 +282,26 @@ function GameDetail({ game }: { game: Game }) {
         })
         .catch(err => console.error('Failed to fetch players:', err))
         .finally(() => setLoadingPlayers(false));
+
+      // Also fetch lineup with status
+      fetch(`${API_URL}/api/games/${game.id}/lineup`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.data) {
+            setLineupData(data.data);
+          }
+        })
+        .catch(err => console.error('Failed to fetch lineup:', err));
+    } else if (game.status === 'Scheduled') {
+      // For scheduled games, only fetch lineup (no on-court players yet)
+      fetch(`${API_URL}/api/games/${game.id}/lineup`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.data) {
+            setLineupData(data.data);
+          }
+        })
+        .catch(err => console.error('Failed to fetch lineup:', err));
     }
   }, [game]);
 
@@ -367,10 +389,32 @@ function GameDetail({ game }: { game: Game }) {
         </div>
       </div>
 
-      {/* Players on Court */}
+      {/* Players on Court / Expected Lineup */}
       <div className="border-t border-[#1A1A1A] pt-8">
-        <h3 className="text-xs font-bold tracking-widest text-gray-500 uppercase mb-6">Players on Court</h3>
-        {loadingPlayers ? (
+        <h3 className="text-xs font-bold tracking-widest text-gray-500 uppercase mb-6">
+          {game.status === 'Scheduled' ? 'Expected Lineup' : 'Players on Court'}
+        </h3>
+        {game.status === 'Scheduled' ? (
+          // Show Expected Lineup for scheduled games
+          lineupData ? (
+            <div className="grid grid-cols-2 gap-8">
+              <ExpectedLineup
+                players={lineupData.away}
+                teamAbbr={game.awayTeam.abbreviation}
+                label={`${game.awayTeam.abbreviation} (Away)`}
+              />
+              <ExpectedLineup
+                players={lineupData.home}
+                teamAbbr={game.homeTeam.abbreviation}
+                label={`${game.homeTeam.abbreviation} (Home)`}
+              />
+            </div>
+          ) : (
+            <div className="bg-[#0A0A0A] rounded-lg p-12 text-center border border-[#1A1A1A] border-dashed">
+              <p className="text-gray-500 text-sm">Loading lineup...</p>
+            </div>
+          )
+        ) : loadingPlayers ? (
           <div className="bg-[#0A0A0A] rounded-lg p-12 text-center border border-[#1A1A1A] border-dashed">
             <p className="text-gray-500 text-sm">Loading players...</p>
           </div>

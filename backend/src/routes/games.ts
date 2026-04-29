@@ -61,6 +61,19 @@ export async function gameRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
+  // Get lineup with status for a game
+  app.get('/:gameId/lineup', async (req: FastifyRequest<{ Params: { gameId: string } }>, reply: FastifyReply) => {
+    const liveState = gameStateService.getLiveState(req.params.gameId);
+
+    if (!liveState || !liveState.players) {
+      return reply.status(404).send({ error: 'No lineup data for this game' });
+    }
+
+    return reply.send({
+      data: liveState.players,
+    });
+  });
+
   // Get games by status window (D-1, D0, D+1)
   app.get('/window/:period', async (req: FastifyRequest<{ Params: { period: string } }>, reply: FastifyReply) => {
     const period = req.params.period as 'yesterday' | 'today' | 'tomorrow';

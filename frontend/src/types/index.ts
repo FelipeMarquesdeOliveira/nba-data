@@ -2,6 +2,7 @@
 export type GameStatus = 'In Progress' | 'Final' | 'Scheduled';
 export type CourtStatus = 'LIVE' | 'SOON' | 'FUTURE' | 'FINISHED';
 export type PropLineStatus = 'GREEN' | 'YELLOW' | 'RED';
+export type PlayerStatus = 'OUT' | 'QUESTIONABLE' | 'PROBABLE' | 'DOUBTFUL' | 'ACTIVE';
 
 export interface Team {
   id: string;
@@ -18,6 +19,7 @@ export interface Player {
   jerseyNumber: string;
   teamId: string;
   position: string;
+  status?: PlayerStatus;
 }
 
 export interface Game {

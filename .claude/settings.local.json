@@ -6,7 +6,28 @@
       "WebSearch",
       "Bash(python3 -m json.tool)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); plays=d.get\\('plays',[]\\); [print\\(p.get\\('text',''\\),'|',p.get\\('type',{}\\).get\\('text',''\\),'|',p.get\\('athlete',{}\\).get\\('fullName',''\\) or 'N/A'\\) for p in plays[:20]]\")",
-      "PowerShell(Stop-Process *)"
+      "PowerShell(Stop-Process *)",
+      "PowerShell(claude skill *)",
+      "PowerShell(npx @anthropic/mcp-skills --help 2>&1 | Select-Object -First 20)",
+      "PowerShell(npx @anthropic-ai/mcp-skills --help 2>&1 | Select-Object -First 20)",
+      "PowerShell(npm search *)",
+      "PowerShell(npm view *)",
+      "PowerShell(npm install *)",
+      "PowerShell(claude-skills *)",
+      "PowerShell(claude-skills-lauvanya28 *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:registry.modelcontextprotocol.io)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "PowerShell(gh repo *)",
+      "PowerShell(git clone *)",
+      "WebFetch(domain:www.google.com)",
+      "PowerShell(git add *)",
+      "PowerShell(git push *)",
+      "WebFetch(domain:site.api.espn.com)",
+      "WebFetch(domain:www.basketball-reference.com)",
+      "PowerShell(Invoke-RestMethod -Uri \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard\" -Method GET | ConvertTo-Json -Depth 10 2>&1 | Select-Object -First 200)",
+      "PowerShell(Invoke-RestMethod -Uri \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401869416\" -Method GET | ConvertTo-Json -Depth 15 2>&1 | Select-Object -First 300)"
     ]
   }
 }

@@ -89,6 +89,23 @@ interface ESPSNScoreboardResponse {
   day: { date: string };
 }
 
+interface ESPNInjury {
+  status: string; // "Out", "Day-To-Day", etc.
+  athlete: {
+    id: string;
+    fullName: string;
+    displayName: string;
+    jersey: string;
+    position: { name: string; displayName: string; abbreviation: string } | string;
+  };
+  type: {
+    id: string;
+    name: string; // "INJURY_STATUS_OUT", "INJURY_STATUS_DAYTODAY", etc.
+    description: string;
+    abbreviation: string;
+  };
+}
+
 interface ESPSNSummaryResponse {
   boxscore?: {
     teams: {
@@ -105,6 +122,7 @@ interface ESPSNSummaryResponse {
         starter?: boolean;
         stats?: string[];
       }[];
+      injuries?: ESPNInjury[];
     }[];
   };
   plays?: {
@@ -176,8 +194,24 @@ export async function fetchESPNscoreboard(): Promise<Game[]> {
   }
 }
 
+// Map ESPN injury status to our PlayerStatus
+function mapInjuryStatus(typeName: string): import('../../shared/src/types/index.js').PlayerStatus | undefined {
+  switch (typeName) {
+    case 'INJURY_STATUS_OUT':
+      return 'OUT';
+    case 'INJURY_STATUS_DAYTODAY':
+      return 'QUESTIONABLE';
+    case 'INJURY_STATUS_PROBABLE':
+      return 'PROBABLE';
+    case 'INJURY_STATUS_DOUBTFUL':
+      return 'DOUBTFUL';
+    default:
+      return undefined;
+  }
+}
+
 // Fetch play-by-play and boxscore from ESPN summary
-export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByPlayEvent[]; homePlayers: Player[]; awayPlayers: Player[]; homeStarters: string[]; awayStarters: string[]; playerPoints: Record<string, number> } | null> {
+export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByPlayEvent[]; homePlayers: Player[]; awayPlayers: Player[]; homeStarters: string[]; awayStarters: string[]; playerPoints: Record<string, number>; homeInjuries: Record<string, import('../../shared/src/types/index.js').PlayerStatus>; awayInjuries: Record<string, import('../../shared/src/types/index.js').PlayerStatus> } | null> {
   try {
     const response = await fetch(`${ESPN_NBA_SUMMARY}?event=${gameId}`);
     if (!response.ok) throw new Error(`ESPN Summary API error: ${response.status}`);
@@ -190,6 +224,26 @@ export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByP
     const homeStarters: string[] = [];
     const awayStarters: string[] = [];
     const playerPoints: Record<string, number> = {};
+    const homeInjuries: Record<string, import('../../shared/src/types/index.js').PlayerStatus> = {};
+    const awayInjuries: Record<string, import('../../shared/src/types/index.js').PlayerStatus> = {};
+
+    // Parse injuries from teams array
+    if (data.boxscore?.teams) {
+      for (const teamEntry of data.boxscore.teams) {
+        const isHome = teamEntry.homeAway === 'home';
+        const injuries = teamEntry.injuries || [];
+        for (const injury of injuries) {
+          const status = mapInjuryStatus(injury.type?.name);
+          if (status && injury.athlete?.id) {
+            if (isHome) {
+              homeInjuries[injury.athlete.id] = status;
+            } else {
+              awayInjuries[injury.athlete.id] = status;
+            }
+          }
+        }
+      }
+    }
 
     // Parse boxscore for players
     // Note: players are in data.boxscore.players (flat array), not in teams[].players
@@ -215,6 +269,12 @@ export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByP
             teamId: ESPN_TEAM_MAP[teamAbbr]?.id || playerEntry.team.id,
             position: typeof athleteEntry.athlete.position === 'string' ? athleteEntry.athlete.position : athleteEntry.athlete.position?.name || '',
           };
+
+          // Apply injury status if player is injured
+          const injuries = isHome ? homeInjuries : awayInjuries;
+          if (injuries[player.id]) {
+            player.status = injuries[player.id];
+          }
 
           // Extract points from stats array
           if (athleteEntry.stats?.[ptsIdx]) {
@@ -271,7 +331,7 @@ export async function fetchGameSummary(gameId: string): Promise<{ plays: PlayByP
       }
     }
 
-    return { plays, homePlayers, awayPlayers, homeStarters, awayStarters, playerPoints };
+    return { plays, homePlayers, awayPlayers, homeStarters, awayStarters, playerPoints, homeInjuries, awayInjuries };
   } catch (error) {
     console.error('[ESPN] Failed to fetch game summary for', gameId, error);
     return null;

@@ -6,6 +6,8 @@ export type CourtStatus = 'LIVE' | 'SOON' | 'FUTURE' | 'FINISHED';
 
 export type PropLineStatus = 'GREEN' | 'YELLOW' | 'RED';
 
+export type PlayerStatus = 'OUT' | 'QUESTIONABLE' | 'PROBABLE' | 'DOUBTFUL' | 'ACTIVE';
+
 export interface Team {
   id: string;
   abbreviation: string; // LAL, BOS, GSW
@@ -22,6 +24,7 @@ export interface Player {
   jerseyNumber: string;
   teamId: string;
   position: string;
+  status?: PlayerStatus; // availability for this game
 }
 
 export interface Game {
@@ -69,6 +72,10 @@ export interface LiveState {
   playersOnCourt: {
     home: PlayerGameStats[];
     away: PlayerGameStats[];
+  };
+  players: {
+    home: Player[];
+    away: Player[];
   };
   lastEvent?: string;
   lastEventTime?: Date;

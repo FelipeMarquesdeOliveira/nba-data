@@ -131,6 +131,12 @@ const espnPoller = new ESPNPoller(async (games) => {
           playersOnCourtEngine.setTeamMapping(game.id, game.homeTeam.abbreviation, game.awayTeam.abbreviation);
           playersOnCourtEngine.setTeamIdMapping(game.id, game.homeTeam.id, game.awayTeam.id);
 
+          // Store full player list with status in live state
+          gameStateService.setPlayers(game.id, {
+            home: summary.homePlayers,
+            away: summary.awayPlayers,
+          });
+
           // Register player names for name resolution
           const allPlayers = [
             ...summary.homePlayers.map(p => ({ ...p, teamAbbr: game.homeTeam.abbreviation })),
