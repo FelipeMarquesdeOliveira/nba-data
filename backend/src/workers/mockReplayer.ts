@@ -2,6 +2,7 @@
 // replays a past game by updating scores and PBP events every N seconds
 
 import type { GameStateService } from '../services/gameState.js';
+import type { Game } from '../../../shared/src/types/index.js';
 
 interface ScoreUpdate {
   homeScore: number;
@@ -10,6 +11,31 @@ interface ScoreUpdate {
   description: string;
   playerId?: string;
 }
+
+// Simulated game for development
+const mockGame: Game = {
+  id: '0022300123',
+  homeTeam: {
+    id: '1610612738',
+    abbreviation: 'BOS',
+    name: 'Celtics',
+    city: 'Boston',
+    logo: 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bos.png',
+  },
+  awayTeam: {
+    id: '1610612747',
+    abbreviation: 'LAL',
+    name: 'Lakers',
+    city: 'Los Angeles',
+    logo: 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/lal.png',
+  },
+  gameTime: new Date().toISOString(),
+  status: 'In Progress',
+  homeScore: 87,
+  awayScore: 82,
+  quarter: 3,
+  clock: '5:42',
+};
 
 // Simulated scoring sequence (would come from real PBP in production)
 const scoringSequence: ScoreUpdate[] = [
@@ -41,6 +67,24 @@ export class MockReplayer {
 
   start(): void {
     if (this.intervalId) return;
+
+    // Register mock game in gameStateService so /api/games returns it
+    this.gameStateService['games'].set(this.gameId, mockGame);
+
+    // Create initial live state for the mock game
+    const initialLiveState: import('../../../shared/src/types/index.js').LiveState = {
+      gameId: this.gameId,
+      homeScore: 87,
+      awayScore: 82,
+      quarter: 3,
+      clock: '5:42',
+      playersOnCourt: { home: [], away: [] },
+      players: { home: [], away: [] },
+      lastEvent: 'Game in progress',
+      lastEventTime: new Date(),
+      possession: 'home',
+    };
+    this.gameStateService['liveStates'].set(this.gameId, initialLiveState);
 
     this.intervalId = setInterval(() => {
       this.tick();

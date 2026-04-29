@@ -27,7 +27,16 @@
       "WebFetch(domain:site.api.espn.com)",
       "WebFetch(domain:www.basketball-reference.com)",
       "PowerShell(Invoke-RestMethod -Uri \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard\" -Method GET | ConvertTo-Json -Depth 10 2>&1 | Select-Object -First 200)",
-      "PowerShell(Invoke-RestMethod -Uri \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401869416\" -Method GET | ConvertTo-Json -Depth 15 2>&1 | Select-Object -First 300)"
+      "PowerShell(Invoke-RestMethod -Uri \"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401869416\" -Method GET | ConvertTo-Json -Depth 15 2>&1 | Select-Object -First 300)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:3001/api/games\" -Method GET 2>&1 | Select-Object -First 20)",
+      "PowerShell(gci *)",
+      "PowerShell(curl *)",
+      "PowerShell($response = Invoke-WebRequest -Uri \"http://localhost:3001/health\" -Method GET -UseBasicParsing; $response.StatusCode; $response.Content)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3001/api/games\" -Method GET -UseBasicParsing | Select-Object StatusCode, Content)",
+      "PowerShell(try { $r = Invoke-WebRequest \"http://localhost:3001/api/games\" -UseBasicParsing; $r.StatusCode } catch { $_.Exception.Response.StatusCode })",
+      "PowerShell(try { $r = Invoke-WebRequest \"http://localhost:3001/api/games\" -UseBasicParsing; $r.Content | ConvertFrom-Json | ConvertTo-Json -Depth 5 } catch { $_.Exception.Message })",
+      "PowerShell(Start-Sleep 5; try { $r = Invoke-WebRequest \"http://localhost:3001/api/games\" -UseBasicParsing; $r.Content | ConvertFrom-Json | ConvertTo-Json -Depth 5 } catch { $_.Exception.Message })"
     ]
   }
 }
